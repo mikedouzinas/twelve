@@ -1,50 +1,155 @@
-# Welcome to your Expo app 👋
+# Twelve - AI-Powered Habit & Journal Coach
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Twelve is a mobile-first personal coaching app that converts free-form daily journals and simple yes/no toggles into an adaptive score, insight summaries, and forward-looking nudges.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Conversational Onboarding**: AI-powered interview to learn your goals and preferences
+- **Daily Journal**: Free-form text entry to capture your thoughts and progress
+- **Habit Tracking**: Simple yes/no toggles for tracking daily habits
+- **AI Scoring**: Intelligent daily scores based on your journal and habits
+- **Calendar Heatmap**: Visual representation of your progress over time
+- **Data Export**: Export your data as CSV for external analysis
+- **Push Notifications**: Timely reminders to keep you on track
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+- **Frontend**: React Native with Expo
+- **Backend**: Supabase (Auth, Database, Edge Functions)
+- **AI**: OpenAI GPT-4 (via Edge Functions)
+- **UI**: iOS-inspired minimal design with Reanimated animations
 
-   ```bash
-   npx expo start
-   ```
+## Getting Started
 
-In the output, you'll find options to open the app in a
+### Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js 18+
+- npm or yarn
+- Expo CLI (`npm install -g expo-cli`)
+- Supabase account
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Environment Setup
 
-## Get a fresh project
-
-When you're ready, run:
-
+1. Clone the repository:
 ```bash
-npm run reset-project
+git clone <repository-url>
+cd twelve
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Install dependencies:
+```bash
+npm install
+```
 
-## Learn more
+3. Create a `.env` file in the root directory:
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+### Supabase Setup
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+1. Create a new Supabase project at [supabase.com](https://supabase.com)
 
-## Join the community
+2. Run the database schema:
+   - Go to the SQL Editor in your Supabase dashboard
+   - Copy the contents of `database-schema.sql`
+   - Run the SQL to create all tables and policies
 
-Join our community of developers creating universal apps.
+3. Enable Email Authentication:
+   - Go to Authentication > Providers
+   - Enable Email provider
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+4. (Optional) Set up Edge Functions for AI analysis:
+   - Create edge functions for `analyzeEntry`, `sendReminder`, etc.
+   - Set the `OPENAI_API_KEY` in your Edge Function secrets
+
+### Running the App
+
+```bash
+# Start the development server
+npm start
+
+# Run on iOS simulator
+npm run ios
+
+# Run on Android emulator
+npm run android
+```
+
+## Project Structure
+
+```
+twelve/
+├── app/                    # Expo Router screens
+│   ├── (auth)/            # Authentication screens
+│   ├── (tabs)/            # Main app tabs
+│   └── onboarding.tsx     # Onboarding flow
+├── components/            # Reusable components
+├── contexts/              # React contexts
+├── lib/                   # Utilities and types
+│   ├── supabase.ts       # Supabase client
+│   └── database.types.ts # TypeScript types
+├── assets/               # Images and fonts
+└── database-schema.sql   # Database schema
+```
+
+## Key Screens
+
+### Authentication
+- **Login**: Email/password sign in
+- **Signup**: New user registration with email verification
+
+### Onboarding
+- Conversational interview to set up user preferences
+- Collects: name, goals, calorie limit, workout frequency, grading style, timezone
+
+### Home (Today)
+- Daily journal entry input
+- Yes/no habit toggles
+- Submit button to analyze entry
+
+### Results
+- Animated score display (0-100)
+- AI-generated reasoning
+- Tomorrow's focus
+- Recommendations
+
+### Calendar (History)
+- Month view with color-coded heatmap
+- Tap days to view details
+- Monthly average score
+
+### Settings
+- Profile management
+- Habit configuration
+- Data export (CSV)
+- Notification preferences
+- Sign out
+
+## Placeholder Implementation
+
+For the MVP, the app uses placeholder scoring instead of real AI analysis:
+- Score is calculated based on completed habits percentage
+- Generic encouraging messages are provided
+- Real AI integration can be added via Supabase Edge Functions
+
+## Future Enhancements
+
+- Deep integrations (Whoop, MyFitnessPal, Apple Health)
+- Automatic budget scoring from connected services
+- Social accountability features
+- Subscription model for premium features
+- HIPAA-grade data export
+
+## Contributing
+
+This is an MVP implementation. Key areas for contribution:
+- Edge Function implementation for real AI analysis
+- Push notification scheduling
+- Integration connectors
+- UI/UX improvements
+
+## License
+
+[Add your license here]
