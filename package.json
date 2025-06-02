@@ -8,7 +8,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "test": "jest --watchAll",
+    "lint": "expo lint",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "edge:serve": "supabase functions serve analyzeEntry --env-file .env",
+    "edge:deploy": "supabase functions deploy analyzeEntry",
+    "edge:deploy:all": "supabase functions deploy analyzeEntry sendReminder fetchIntegrations"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

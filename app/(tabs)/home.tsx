@@ -1,4 +1,6 @@
+import { ConversationalJournal } from '@/components/ConversationalJournal';
 import { useAuth } from '@/contexts/AuthContext';
+import { analyzeJournalEntry, fetchUserHistory } from '@/lib/api';
 import { Habit, YesNoResults } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,33 +10,62 @@ import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+interface JournalData {
+  bodyweight_lb?: number;
+  whoop_calories_burned?: number;
+  calories?: number;
+  protein_g?: number;
+  meals?: Array<{ time: string; desc: string }>;
+  exercise?: {
+    resistance?: string;
+    cardio?: string;
+    steps?: number;
+  };
+  sleep_h?: number;
+  stress_level_1_5?: number;
+  notes?: string;
+}
+
 export default function HomeScreen() {
-  const [journalText, setJournalText] = useState('');
   const [habits, setHabits] = useState<Habit[]>([]);
   const [yesNoResults, setYesNoResults] = useState<YesNoResults>({});
   const [loading, setLoading] = useState(false);
   const [todayEntry, setTodayEntry] = useState<any>(null);
+  const [journalData, setJournalData] = useState<JournalData>({});
+  const [userGoals, setUserGoals] = useState<any>(null);
   
   const { user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (user) {
+      fetchUserData();
       fetchHabits();
       checkTodayEntry();
     }
   }, [user]);
+
+  const fetchUserData = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('goals, grading_style')
+      .eq('id', user.id)
+      .single();
+
+    if (data && !error) {
+      setUserGoals(data.goals);
+    }
+  };
 
   const fetchHabits = async () => {
     if (!user) return;
@@ -69,8 +100,18 @@ export default function HomeScreen() {
 
     if (data) {
       setTodayEntry(data);
-      if (data.journal_text) setJournalText(data.journal_text);
       if (data.yes_no_results) setYesNoResults(data.yes_no_results as YesNoResults);
+      // Parse stored journal data if exists
+      if (data.journal_text) {
+        try {
+          const parsedData = JSON.parse(data.journal_text);
+          if (typeof parsedData === 'object') {
+            setJournalData(parsedData);
+          }
+        } catch (e) {
+          // If not JSON, it's legacy plain text
+        }
+      }
     }
   };
 
@@ -82,11 +123,40 @@ export default function HomeScreen() {
     }));
   };
 
+  const validateJournalData = (data: JournalData): string[] => {
+    const missingFields: string[] = [];
+    
+    // Check required fields based on user goals
+    if (userGoals?.calorieLimit && !data.calories) {
+      missingFields.push('calories');
+    }
+    if (userGoals?.proteinGoal && !data.protein_g) {
+      missingFields.push('protein');
+    }
+    if (!data.sleep_h) {
+      missingFields.push('sleep hours');
+    }
+    if (!data.exercise || (!data.exercise.resistance && !data.exercise.cardio)) {
+      missingFields.push('exercise details');
+    }
+    if (!data.meals || data.meals.length === 0) {
+      missingFields.push('meal information');
+    }
+    
+    return missingFields;
+  };
+
   const handleSubmit = async () => {
     if (!user) return;
 
-    if (!journalText.trim() && Object.keys(yesNoResults).length === 0) {
-      Alert.alert('Error', 'Please write something or check at least one habit');
+    // Validate journal data
+    const missingFields = validateJournalData(journalData);
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Missing Information',
+        `Please provide the following information before submitting:\n\n${missingFields.map(f => `• ${f}`).join('\n')}\n\nYou can either type it in the journal or use the quick input buttons.`,
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -95,13 +165,20 @@ export default function HomeScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
       
+      // Prepare the structured data for GPT
+      const structuredEntry = {
+        date: today,
+        ...journalData,
+        yes_no_results: yesNoResults,
+      };
+
       // Save entry to database
       const { data: entryData, error: entryError } = await supabase
         .from('entries')
         .upsert({
           user_id: user.id,
           date: today,
-          journal_text: journalText,
+          journal_text: JSON.stringify(structuredEntry), // Store as JSON
           yes_no_results: yesNoResults,
         })
         .select()
@@ -109,17 +186,42 @@ export default function HomeScreen() {
 
       if (entryError) throw entryError;
 
-      // For MVP, generate a placeholder score
-      const score = calculatePlaceholderScore(yesNoResults);
+      let analysisResult;
       
-      // Update entry with score
+      // Try to use the edge function if available
+      const USE_EDGE_FUNCTION = process.env.EXPO_PUBLIC_USE_EDGE_FUNCTIONS === 'true';
+      
+      if (USE_EDGE_FUNCTION) {
+        // Fetch user history for context
+        const history = await fetchUserHistory(user.id, 7);
+        
+        // Call the edge function for AI analysis
+        analysisResult = await analyzeJournalEntry(
+          structuredEntry,
+          userGoals,
+          history,
+          {} // integrations placeholder
+        );
+      } else {
+        // Use placeholder scoring for MVP
+        analysisResult = {
+          score: calculatePlaceholderScore(yesNoResults, journalData),
+          reasoning: generatePlaceholderReasoning(journalData, yesNoResults, userGoals),
+          focusTomorrow: generatePlaceholderFocus(journalData, userGoals),
+          emotionSummary: "positive",
+          recommendations: ["Keep tracking your habits daily", "Stay consistent with your goals"],
+        };
+      }
+      
+      // Update entry with analysis results
       await supabase
         .from('entries')
         .update({
-          score,
-          reasoning: "Great job logging your day! Keep up the consistency.",
-          focus_tomorrow: "Continue building on today's momentum.",
-          emotion_summary: "positive",
+          score: analysisResult.score,
+          reasoning: analysisResult.reasoning,
+          focus_tomorrow: analysisResult.focusTomorrow,
+          emotion_summary: analysisResult.emotionSummary,
+          recommendations: analysisResult.recommendations,
         })
         .eq('id', entryData.id);
 
@@ -138,10 +240,78 @@ export default function HomeScreen() {
     }
   };
 
-  const calculatePlaceholderScore = (results: YesNoResults): number => {
+  const calculatePlaceholderScore = (results: YesNoResults, journal: JournalData): number => {
+    let score = 0;
+    let totalWeight = 0;
+
+    // Habits score (30% weight)
     const totalHabits = Object.keys(results).length;
     const completedHabits = Object.values(results).filter(Boolean).length;
-    return totalHabits > 0 ? completedHabits / totalHabits : 0.5;
+    if (totalHabits > 0) {
+      score += (completedHabits / totalHabits) * 0.3;
+      totalWeight += 0.3;
+    }
+
+    // Nutrition score (30% weight)
+    if (userGoals?.calorieLimit && journal.calories) {
+      const calorieDeviation = Math.abs(journal.calories - userGoals.calorieLimit) / userGoals.calorieLimit;
+      const calorieScore = Math.max(0, 1 - calorieDeviation);
+      score += calorieScore * 0.3;
+      totalWeight += 0.3;
+    }
+
+    // Sleep score (20% weight)
+    if (journal.sleep_h) {
+      const sleepScore = Math.min(journal.sleep_h / 8, 1); // 8 hours is optimal
+      score += sleepScore * 0.2;
+      totalWeight += 0.2;
+    }
+
+    // Exercise score (20% weight)
+    if (journal.exercise && (journal.exercise.resistance || journal.exercise.cardio)) {
+      score += 0.2;
+      totalWeight += 0.2;
+    }
+
+    return totalWeight > 0 ? score / totalWeight : 0.5;
+  };
+
+  const generatePlaceholderReasoning = (journal: JournalData, habits: YesNoResults, goals: any): string => {
+    const completedHabits = Object.values(habits).filter(Boolean).length;
+    const totalHabits = Object.keys(habits).length;
+    
+    let reasoning = `You completed ${completedHabits} out of ${totalHabits} habits today. `;
+    
+    if (journal.calories && goals?.calorieLimit) {
+      const diff = journal.calories - goals.calorieLimit;
+      if (Math.abs(diff) < 100) {
+        reasoning += `Great job staying close to your calorie target! `;
+      } else if (diff > 0) {
+        reasoning += `You went over your calorie target by ${diff} calories. `;
+      } else {
+        reasoning += `You were under your calorie target by ${Math.abs(diff)} calories. `;
+      }
+    }
+    
+    if (journal.sleep_h) {
+      if (journal.sleep_h >= 7) {
+        reasoning += `Excellent sleep duration of ${journal.sleep_h} hours. `;
+      } else {
+        reasoning += `Try to get more sleep - you only got ${journal.sleep_h} hours. `;
+      }
+    }
+    
+    return reasoning;
+  };
+
+  const generatePlaceholderFocus = (journal: JournalData, goals: any): string => {
+    if (journal.sleep_h && journal.sleep_h < 7) {
+      return "Prioritize getting to bed earlier tonight for better recovery.";
+    }
+    if (!journal.exercise || (!journal.exercise.resistance && !journal.exercise.cardio)) {
+      return "Make sure to get some form of exercise tomorrow.";
+    }
+    return "Keep up the great work and stay consistent with your habits!";
   };
 
   const today = new Date();
@@ -182,43 +352,34 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Journal Entry</Text>
-          <TextInput
-            style={styles.journalInput}
-            placeholder="Write about your day, thoughts, or anything else..."
-            placeholderTextColor="#999"
-            multiline
-            value={journalText}
-            onChangeText={setJournalText}
-            textAlignVertical="top"
+        <View style={styles.journalSection}>
+          <Text style={styles.sectionTitle}>Journal & Daily Log</Text>
+          <ConversationalJournal
+            onDataChange={setJournalData}
+            initialData={journalData}
+            userGoals={userGoals}
           />
         </View>
       </ScrollView>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
-      >
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.submitButtonText}>
-                  {todayEntry ? 'Update Entry' : 'Submit Entry'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>
+                {todayEntry ? 'Update Entry' : 'Submit Entry'}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -229,11 +390,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   content: {
-    paddingHorizontal: 20,
     paddingBottom: 100,
   },
   header: {
     paddingVertical: 24,
+    paddingHorizontal: 20,
   },
   date: {
     fontSize: 16,
@@ -246,13 +407,19 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  journalSection: {
+    flex: 1,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#000',
     marginBottom: 16,
+    paddingHorizontal: 20,
   },
   habitRow: {
     flexDirection: 'row',
@@ -278,14 +445,6 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     backgroundColor: '#0A84FF',
     borderColor: '#0A84FF',
-  },
-  journalInput: {
-    backgroundColor: '#F8F8F8',
-    borderRadius: 20,
-    padding: 20,
-    fontSize: 16,
-    minHeight: 150,
-    color: '#000',
   },
   footer: {
     position: 'absolute',

@@ -5,8 +5,10 @@ Twelve is a mobile-first personal coaching app that converts free-form daily jou
 ## Features
 
 - **Conversational Onboarding**: AI-powered interview to learn your goals and preferences
-- **Daily Journal**: Free-form text entry to capture your thoughts and progress
-- **Habit Tracking**: Simple yes/no toggles for tracking daily habits
+- **Conversational Journal**: Free-form chat interface with intelligent parsing and real-time feedback
+- **Quick Input Buttons**: Fast entry for common metrics (weight, calories, protein, sleep, stress)
+- **Smart Field Detection**: AI automatically extracts structured data from natural language
+- **Daily Habit Tracking**: Simple yes/no toggles for tracking daily habits
 - **AI Scoring**: Intelligent daily scores based on your journal and habits
 - **Calendar Heatmap**: Visual representation of your progress over time
 - **Data Export**: Export your data as CSV for external analysis
@@ -27,6 +29,7 @@ Twelve is a mobile-first personal coaching app that converts free-form daily jou
 - npm or yarn
 - Expo CLI (`npm install -g expo-cli`)
 - Supabase account
+- OpenAI API key (for AI features)
 
 ### Environment Setup
 
@@ -45,6 +48,7 @@ npm install
 ```env
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_USE_EDGE_FUNCTIONS=false # Set to true when edge functions are deployed
 ```
 
 ### Supabase Setup
@@ -60,9 +64,11 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    - Go to Authentication > Providers
    - Enable Email provider
 
-4. (Optional) Set up Edge Functions for AI analysis:
-   - Create edge functions for `analyzeEntry`, `sendReminder`, etc.
+4. Set up Edge Functions (for AI analysis):
+   - Install Supabase CLI: `npm install -g supabase`
+   - Link your project: `supabase link --project-ref your-project-ref`
    - Set the `OPENAI_API_KEY` in your Edge Function secrets
+   - Deploy: `npm run edge:deploy`
 
 ### Running the App
 
@@ -86,69 +92,79 @@ twelve/
 │   ├── (tabs)/            # Main app tabs
 │   └── onboarding.tsx     # Onboarding flow
 ├── components/            # Reusable components
+│   └── ConversationalJournal.tsx  # Chat-based journal interface
 ├── contexts/              # React contexts
 ├── lib/                   # Utilities and types
+│   ├── api.ts            # API helper functions
 │   ├── supabase.ts       # Supabase client
 │   └── database.types.ts # TypeScript types
+├── supabase/             # Supabase functions
+│   └── functions/        # Edge functions
+│       └── analyzeEntry/ # AI analysis function
 ├── assets/               # Images and fonts
 └── database-schema.sql   # Database schema
 ```
 
-## Key Screens
+## Key Features Implementation
 
-### Authentication
-- **Login**: Email/password sign in
-- **Signup**: New user registration with email verification
+### Conversational Journal
 
-### Onboarding
-- Conversational interview to set up user preferences
-- Collects: name, goals, calorie limit, workout frequency, grading style, timezone
+The app features a chat-like interface where users can naturally describe their day. The AI assistant:
+- Parses natural language to extract structured data
+- Provides real-time feedback and encouragement
+- Asks follow-up questions for missing information
+- Offers contextual tips based on user goals
 
-### Home (Today)
-- Daily journal entry input
-- Yes/no habit toggles
-- Submit button to analyze entry
+### Quick Input System
 
-### Results
-- Animated score display (0-100)
-- AI-generated reasoning
-- Tomorrow's focus
-- Recommendations
+- Horizontal scrollable buttons for common metrics
+- Tap to quickly input numerical values
+- Visual feedback showing current values
+- Seamless integration with conversational flow
 
-### Calendar (History)
-- Month view with color-coded heatmap
-- Tap days to view details
-- Monthly average score
+### AI Analysis
 
-### Settings
-- Profile management
-- Habit configuration
-- Data export (CSV)
-- Notification preferences
-- Sign out
+When edge functions are enabled:
+- GPT-4 analyzes the complete journal entry
+- Considers user goals and historical data
+- Provides personalized scoring and recommendations
+- Generates forward-looking focus areas
 
-## Placeholder Implementation
+## Data Model
 
-For the MVP, the app uses placeholder scoring instead of real AI analysis:
-- Score is calculated based on completed habits percentage
-- Generic encouraging messages are provided
-- Real AI integration can be added via Supabase Edge Functions
+The app tracks:
+- **Core Metrics**: Weight, calories, protein, sleep hours, stress level
+- **Meals**: Time and description of each meal
+- **Exercise**: Resistance training, cardio, and steps
+- **Habits**: Custom yes/no habits defined by the user
+- **Notes**: Free-form additional observations
+
+## Placeholder vs Production Mode
+
+The app can run in two modes:
+1. **Placeholder Mode** (default): Uses local scoring algorithms
+2. **Production Mode**: Uses GPT-4 via edge functions for intelligent analysis
+
+Toggle between modes by setting `EXPO_PUBLIC_USE_EDGE_FUNCTIONS` in your `.env` file.
 
 ## Future Enhancements
 
 - Deep integrations (Whoop, MyFitnessPal, Apple Health)
 - Automatic budget scoring from connected services
+- Voice input for journal entries
 - Social accountability features
+- Advanced analytics and trends
 - Subscription model for premium features
 - HIPAA-grade data export
 
 ## Contributing
 
 This is an MVP implementation. Key areas for contribution:
-- Edge Function implementation for real AI analysis
-- Push notification scheduling
-- Integration connectors
+- Additional integration connectors
+- Enhanced natural language parsing
 - UI/UX improvements
+- Performance optimizations
+- Additional edge functions
 
 ## License
 
