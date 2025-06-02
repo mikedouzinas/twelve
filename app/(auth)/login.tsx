@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -29,12 +30,27 @@ export default function LoginScreen() {
 
     setLoading(true);
     const { error } = await signIn(email, password);
-    setLoading(false);
-
+    
     if (error) {
+      setLoading(false);
       Alert.alert('Error', error.message);
     } else {
-      router.replace('/(tabs)/home');
+      // Check if user has completed onboarding
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name, goals, grading_style')
+        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+      
+      setLoading(false);
+      
+      if (userData && userData.name && userData.goals && userData.grading_style) {
+        // User has completed onboarding
+        router.replace('/(tabs)/home');
+      } else {
+        // User needs to complete onboarding
+        router.replace('/onboarding');
+      }
     }
   };
 

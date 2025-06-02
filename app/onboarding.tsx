@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -29,7 +30,6 @@ const ONBOARDING_QUESTIONS = [
   "How many times per week would you like to work out?",
   "How strict would you like me to be with grading? (lenient, moderate, or strict)",
   "What time zone are you in?",
-  "Perfect! I've got everything I need. Ready to start your journey?",
 ];
 
 export default function OnboardingScreen() {
@@ -102,9 +102,6 @@ export default function OnboardingScreen() {
         break;
       case 5: // Timezone
         newUserData.timezone = input;
-        nextMessage = ONBOARDING_QUESTIONS[6];
-        break;
-      case 6: // Complete
         await completeOnboarding();
         return;
     }
@@ -149,16 +146,26 @@ export default function OnboardingScreen() {
         { habit_name: 'goodSleep', label: 'Got 7+ hours of sleep' },
       ];
 
-      for (const habit of defaultHabits) {
-        await supabase.from('habits').insert({
-          user_id: user.id,
-          ...habit,
-        });
-      }
+      const { error: habitsError } = await supabase
+        .from('habits')
+        .insert(
+          defaultHabits.map(habit => ({
+            user_id: user.id,
+            ...habit,
+            is_active: true,
+          }))
+        );
+
+      if (habitsError) throw habitsError;
 
       router.replace('/(tabs)/home');
     } catch (error) {
       console.error('Error completing onboarding:', error);
+      Alert.alert(
+        'Error',
+        'Failed to complete onboarding. Please try again.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+      );
     } finally {
       setLoading(false);
     }
